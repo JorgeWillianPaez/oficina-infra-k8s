@@ -1,0 +1,115 @@
+name: oficina
+
+x-shared-environment: &shared-environment
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+  JWT_SECRET: local-development-secret
+  SMTP_HOST: mailhog
+  SMTP_PORT: 1025
+
+services:
+  os-service:
+    build: ../../oficina-os-service
+    ports:
+      - "3001:3001"
+    environment:
+      <<: *shared-environment
+      DATABASE_URL: postgresql://oficina:oficina@os-db:5432/os_service
+      ADMIN_EMAIL: admin@oficina.com
+      ADMIN_PASSWORD: admin123
+    depends_on:
+      os-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  billing-service:
+    build: ../../oficina-billing-service
+    ports:
+      - "3002:3002"
+    environment:
+      <<: *shared-environment
+      DATABASE_URL: postgresql://oficina:oficina@billing-db:5432/billing_service
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      MERCADOPAGO_NOTIFICATION_URL: ${MERCADOPAGO_NOTIFICATION_URL:-}
+    depends_on:
+      billing-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  execution-service:
+    build: ../../oficina-execution-service
+    ports:
+      - "3003:3003"
+    environment:
+      <<: *shared-environment
+      DYNAMODB_ENDPOINT: http://execution-db:8000
+      DYNAMODB_TABLE: oficina-work-orders
+    depends_on:
+      execution-db:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  auth-lambda:
+    build: ../../oficina-auth-lambda
+    ports:
+      - "3000:3000"
+    environment:
+      JWT_SECRET: local-development-secret
+      DATABASE_URL: postgresql://oficina:oficina@os-db:5432/os_service
+    depends_on:
+      os-db:
+        condition: service_healthy
+
+  os-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: oficina
+      POSTGRES_PASSWORD: oficina
+      POSTGRES_DB: os_service
+    volumes:
+      - os-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oficina -d os_service"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  billing-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: oficina
+      POSTGRES_PASSWORD: oficina
+      POSTGRES_DB: billing_service
+    volumes:
+      - billing-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oficina -d billing_service"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  execution-db:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+
+volumes:
+  os-db-data:
+  billing-db-data:
