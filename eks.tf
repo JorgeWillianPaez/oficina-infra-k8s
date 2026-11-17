@@ -59,9 +59,39 @@ resource "aws_iam_role_policy_attachment" "node" {
   policy_arn = each.value
 }
 
+resource "aws_eks_addon" "pod_identity" {
+  cluster_name = aws_eks_cluster.this.name
+  addon_name   = "eks-pod-identity-agent"
+
+  depends_on = [aws_eks_node_group.this]
+}
+
+resource "aws_iam_role" "execution_service" {
+  name = "${var.project}-execution-service"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = ["sts:AssumeRole", "sts:TagSession"]
+      Principal = { Service = "pods.eks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_eks_pod_identity_association" "execution_service" {
+  for_each        = var.environments
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = "${var.project}-${each.value}"
+  service_account = "oficina-execution-service"
+  role_arn        = aws_iam_role.execution_service.arn
+
+  depends_on = [aws_eks_addon.pod_identity]
+}
+
 resource "aws_iam_role_policy" "work_orders_table" {
   name = "${var.project}-work-orders-table"
-  role = aws_iam_role.node.id
+  role = aws_iam_role.execution_service.id
 
   policy = jsonencode({
     Version = "2012-10-17"

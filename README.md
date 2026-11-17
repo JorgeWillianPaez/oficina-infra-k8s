@@ -41,7 +41,7 @@ flowchart TB
 | Arquivo | Recursos |
 |---|---|
 | `network.tf` | VPC, duas subnets públicas, internet gateway e rotas |
-| `eks.tf` | Cluster EKS, node group com auto scaling, roles IAM, permissão de acesso ao DynamoDB e repositórios ECR dos três microsserviços |
+| `eks.tf` | Cluster EKS, node group com auto scaling, roles IAM, EKS Pod Identity com a role de acesso ao DynamoDB do execution-service e repositórios ECR dos três microsserviços |
 | `platform.tf` | Namespaces `oficina-hml` e `oficina-prod`, metrics-server (necessário para o HPA), ingress-nginx com NLB e o bundle do New Relic |
 | `messaging.tf` | RabbitMQ no namespace `messaging` |
 | `api-gateway.tf` | API Gateway HTTP API roteando para o ingress do cluster, com logs de acesso |
